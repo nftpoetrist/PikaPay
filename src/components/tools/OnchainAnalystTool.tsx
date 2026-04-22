@@ -7,6 +7,13 @@ import {
   RotateCcw, ExternalLink, Clock,
 } from "lucide-react";
 import { analyzeMarketData, CoinAnalysis, CoinMarketData } from "@/lib/toolEngines";
+import { useWallet } from "@/contexts/WalletContext";
+import { useSessionWallet } from "@/contexts/SessionWalletContext";
+import TxToast from "@/components/TxToast";
+import SetupPaymentModal from "@/components/SetupPaymentModal";
+
+const TOOL_PRICE = 0.015;
+const TOOL_NAME  = "Onchain Investment Analyst";
 
 // ─── API types ────────────────────────────────────────────
 
@@ -477,15 +484,25 @@ function AnalysisDashboard({
 // ─── Main Component ───────────────────────────────────────
 
 export default function OnchainAnalystTool() {
-  const [query, setQuery]           = useState("");
+  const { address: arcAddress, provider: arcProvider } = useWallet();
+  const session = useSessionWallet();
+
+  const [query, setQuery]             = useState("");
   const [suggestions, setSuggestions] = useState<CoinSuggestion[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [analysis, setAnalysis]     = useState<CoinAnalysis | null>(null);
-  const [coinImage, setCoinImage]   = useState("");
+  const [analysis, setAnalysis]       = useState<CoinAnalysis | null>(null);
+  const [coinImage, setCoinImage]     = useState("");
   const [fetchLoading, setFetchLoading] = useState(false);
-  const [error, setError]           = useState("");
+  const [error, setError]             = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Payment state
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [toastVisible, setToastVisible]     = useState(false);
+  const [toastTxHash, setToastTxHash]       = useState("");
+  const pendingCoinRef = useRef<CoinSuggestion | null>(null);
+
+  const inputRef    = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // ── Debounced search ──
@@ -529,16 +546,29 @@ export default function OnchainAnalystTool() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleSelect = useCallback(async (coin: CoinSuggestion) => {
+  const showToast = useCallback((txHash: string) => {
+    setToastTxHash(txHash);
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 5000);
+  }, []);
+
+  const runAnalysis = useCallback(async (coin: CoinSuggestion) => {
     setShowSuggestions(false);
     setQuery(coin.name);
     setFetchLoading(true);
     setError("");
 
     try {
-      const res = await fetch(`/api/crypto/market?id=${encodeURIComponent(coin.id)}`);
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-      const raw: CGMarket | null = await res.json();
+      // Fetch market data + collect payment in parallel
+      const marketPromise = fetch(`/api/crypto/market?id=${encodeURIComponent(coin.id)}`);
+      const payPromise = (arcAddress && session.setupStatus === "ready")
+        ? session.pay(TOOL_PRICE).then(txHash => ({ txHash })).catch(() => null)
+        : Promise.resolve(null);
+
+      const [marketRes, payResult] = await Promise.all([marketPromise, payPromise]);
+
+      if (!marketRes.ok) throw new Error(`API error ${marketRes.status}`);
+      const raw: CGMarket | null = await marketRes.json();
       if (!raw) throw new Error("No data returned for this asset.");
 
       const coinData: CoinMarketData = {
@@ -555,12 +585,37 @@ export default function OnchainAnalystTool() {
       setCoinImage(raw.image ?? "");
       const [result] = analyzeMarketData([coinData]);
       setAnalysis(result);
+
+      if (payResult?.txHash) showToast(payResult.txHash);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to fetch market data.";
       setError(msg.includes("429") ? "Rate limit hit — please wait a moment and try again." : msg);
     }
     setFetchLoading(false);
-  }, []);
+  }, [arcAddress, session, showToast]);
+
+  const handleSelect = useCallback(async (coin: CoinSuggestion) => {
+    if (!arcAddress || !arcProvider) {
+      await runAnalysis(coin);
+      return;
+    }
+    // Setup not done yet — show modal, save coin for after
+    if (session.setupStatus === "needs_setup" || session.setupStatus === "needs_refill") {
+      pendingCoinRef.current = coin;
+      setShowSetupModal(true);
+      return;
+    }
+    await runAnalysis(coin);
+  }, [arcAddress, arcProvider, session.setupStatus, runAnalysis]);
+
+  const handleSetupDone = useCallback(() => {
+    setShowSetupModal(false);
+    session.checkSetup().then(() => {
+      const coin = pendingCoinRef.current;
+      pendingCoinRef.current = null;
+      if (coin) runAnalysis(coin);
+    });
+  }, [session, runAnalysis]);
 
   const handleReset = () => {
     setAnalysis(null);
@@ -570,39 +625,70 @@ export default function OnchainAnalystTool() {
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
+  const setupModalNode = (arcAddress && arcProvider) ? (
+    <SetupPaymentModal
+      open={showSetupModal}
+      sessionAddress={session.sessionAddress}
+      provider={arcProvider}
+      mode={session.setupStatus === "needs_refill" ? "refill" : "setup"}
+      onDone={handleSetupDone}
+      onClose={() => { setShowSetupModal(false); pendingCoinRef.current = null; }}
+    />
+  ) : null;
+
+  const txToastNode = (
+    <TxToast
+      visible={toastVisible}
+      txHash={toastTxHash}
+      amount={TOOL_PRICE}
+      toolName={TOOL_NAME}
+    />
+  );
+
   // ── Loading state ──
   if (fetchLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-4">
-        <div className="relative">
-          <div className="w-12 h-12 border-2 border-violet-500/30 rounded-full" />
-          <div className="w-12 h-12 border-2 border-violet-500 border-t-transparent rounded-full animate-spin absolute inset-0" />
+      <>
+        {setupModalNode}
+        {txToastNode}
+        <div className="flex flex-col items-center justify-center py-16 gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 border-2 border-violet-500/30 rounded-full" />
+            <div className="w-12 h-12 border-2 border-violet-500 border-t-transparent rounded-full animate-spin absolute inset-0" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
+              Fetching live market data…
+            </p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Pulling from CoinGecko · Running analysis engine
+            </p>
+          </div>
         </div>
-        <div className="text-center">
-          <p className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
-            Fetching live market data…
-          </p>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            Pulling from CoinGecko · Running analysis engine
-          </p>
-        </div>
-      </div>
+      </>
     );
   }
 
   // ── Results view ──
   if (analysis) {
     return (
-      <AnalysisDashboard
-        analysis={analysis}
-        coinImage={coinImage}
-        onReset={handleReset}
-      />
+      <>
+        {setupModalNode}
+        {txToastNode}
+        <AnalysisDashboard
+          analysis={analysis}
+          coinImage={coinImage}
+          onReset={handleReset}
+        />
+      </>
     );
   }
 
   // ── Input view ──
   return (
+    <>
+    {setupModalNode}
+    {txToastNode}
     <div className="space-y-5">
       {/* Header */}
       <div>
@@ -735,5 +821,6 @@ export default function OnchainAnalystTool() {
         </p>
       </div>
     </div>
+    </>
   );
 }

@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { WalletProvider } from "@/contexts/WalletContext";
 import { EmbeddedWalletProvider } from "@/contexts/EmbeddedWalletContext";
+import { SessionWalletProvider } from "@/contexts/SessionWalletContext";
 import Navbar from "@/components/Navbar";
 
 const inter = Inter({
@@ -27,8 +28,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full flex flex-col">
         <EmbeddedWalletProvider>
           <WalletProvider>
-            <Navbar />
-            <main className="flex-1 pt-16">{children}</main>
+            <SessionWalletProvider>
+              <Navbar />
+              <main className="flex-1 pt-16">{children}</main>
+            </SessionWalletProvider>
           </WalletProvider>
         </EmbeddedWalletProvider>
       </body>

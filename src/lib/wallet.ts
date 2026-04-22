@@ -8,8 +8,10 @@ export const USDC_DECIMALS = 6;
 
 // Payments go to this address on Arc Testnet.
 // Replace with your actual receiving wallet before going live.
-export const PIKAPAY_MERCHANT =
-  process.env.NEXT_PUBLIC_MERCHANT_ADDRESS ?? "0x000000000000000000000000000000000000dEaD";
+const _merchant = process.env.NEXT_PUBLIC_MERCHANT_ADDRESS ?? "";
+export const PIKAPAY_MERCHANT = /^0x[0-9a-fA-F]{40}$/.test(_merchant)
+  ? _merchant
+  : "0x000000000000000000000000000000000000dEaD";
 
 export const ARC_CHAIN_PARAMS = {
   chainId: ARC_CHAIN_ID_HEX,
@@ -87,7 +89,11 @@ export async function ensureArcNetwork(provider: ethers.BrowserProvider): Promis
 export async function connectWithProvider(
   eip1193: ethers.Eip1193Provider,
 ): Promise<{ address: string; provider: ethers.BrowserProvider } | null> {
-  const provider = new ethers.BrowserProvider(eip1193);
+  // Provide explicit network info so ethers v6 never attempts ENS resolution on Arc
+  const provider = new ethers.BrowserProvider(eip1193, {
+    chainId: ARC_CHAIN_ID,
+    name: "arc-testnet",
+  });
   try {
     await requestAccountsWithTimeout(provider);
     const ok = await ensureArcNetwork(provider);
@@ -118,6 +124,8 @@ const USDC_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)",
   "function decimals() view returns (uint8)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
 ];
 
 export async function getUSDCBalance(
@@ -131,6 +139,29 @@ export async function getUSDCBalance(
   } catch {
     return "0";
   }
+}
+
+/** Check how much USDC `spender` is allowed to pull from `owner`. */
+export async function checkUSDCAllowance(
+  provider: ethers.BrowserProvider,
+  owner: string,
+  spender: string,
+): Promise<bigint> {
+  const contract = new ethers.Contract(USDC_ADDR, USDC_ABI, provider);
+  return (await contract.allowance(owner, spender)) as bigint;
+}
+
+/** Approve `spender` to pull up to `amountHuman` USDC from the connected wallet. */
+export async function approveUSDCSpender(
+  provider: ethers.BrowserProvider,
+  spender: string,
+  amountHuman: number,
+): Promise<void> {
+  const signer = await provider.getSigner();
+  const contract = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+  const amount = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
+  const tx = await contract.approve(spender, amount);
+  await tx.wait(1);
 }
 
 /** Send real USDC on Arc Testnet. Resolves with the tx hash after 1 confirmation. */
