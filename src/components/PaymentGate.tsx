@@ -115,7 +115,10 @@ export default function PaymentGate({ toolSlug, toolName, price, onSuccess }: Pr
       setTimeout(onSuccess, 1600);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Transaction rejected";
-      setErrorMsg(msg.includes("user rejected") ? "Transaction rejected by user" : msg);
+      let friendly = msg;
+      if (msg.includes("user rejected")) friendly = "Transaction rejected by user.";
+      else if (msg.includes("txpool is full")) friendly = "Arc Testnet is congested. Please try again in a few seconds.";
+      setErrorMsg(friendly);
       setStep("error");
     }
   }, [arcProvider, arcAddress, price, toolSlug, toolName, onSuccess]);

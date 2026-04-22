@@ -93,10 +93,27 @@ export async function fundSessionWallet(
   await tx.wait(1);
 }
 
+function isTxpoolFull(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.toLowerCase().includes("txpool is full");
+}
+
+async function retryOnTxpoolFull<T>(fn: () => Promise<T>, maxAttempts = 4): Promise<T> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isTxpoolFull(err) || i === maxAttempts - 1) throw err;
+      await new Promise(r => setTimeout(r, 2500 * (i + 1)));
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 /**
  * Collect a micro-payment.
  * Session wallet calls transferFrom(userMainWallet → merchant, amount).
- * No MetaMask popup — fully automated.
+ * No MetaMask popup — fully automated. Retries up to 3× on txpool full.
  */
 export async function collectWithSessionWallet(
   fromAddress: string,
@@ -106,11 +123,13 @@ export async function collectWithSessionWallet(
   const wallet = getSessionWallet();
   const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, wallet);
   const amount = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
-  const tx = await usdc.transferFrom(
-    ethers.getAddress(fromAddress),
-    ethers.getAddress(toAddress),
-    amount,
-  );
-  const receipt = await tx.wait(1);
-  return (receipt as ethers.TransactionReceipt).hash;
+  return retryOnTxpoolFull(async () => {
+    const tx = await usdc.transferFrom(
+      ethers.getAddress(fromAddress),
+      ethers.getAddress(toAddress),
+      amount,
+    );
+    const receipt = await tx.wait(1);
+    return (receipt as ethers.TransactionReceipt).hash;
+  });
 }
