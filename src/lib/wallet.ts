@@ -164,36 +164,16 @@ export async function approveUSDCSpender(
   await tx.wait(1);
 }
 
-function isTxpoolFull(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return msg.toLowerCase().includes("txpool is full");
-}
-
-async function retryOnTxpoolFull<T>(fn: () => Promise<T>, maxAttempts = 4): Promise<T> {
-  for (let i = 0; i < maxAttempts; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      if (!isTxpoolFull(err) || i === maxAttempts - 1) throw err;
-      await new Promise(r => setTimeout(r, 2500 * (i + 1)));
-    }
-  }
-  throw new Error("Unreachable");
-}
-
-/** Send real USDC on Arc Testnet. Resolves with the tx hash after 1 confirmation.
- *  Retries up to 3 times (with backoff) if the txpool is full. */
+/** Send real USDC on Arc Testnet. Resolves with the tx hash after 1 confirmation. */
 export async function sendUSDC(
   provider: ethers.BrowserProvider,
   to: string,
   amountHuman: number,
 ): Promise<{ txHash: string }> {
-  return retryOnTxpoolFull(async () => {
-    const signer = await provider.getSigner();
-    const contract = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
-    const amount = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
-    const tx = await contract.transfer(to, amount);
-    const receipt = await tx.wait(1);
-    return { txHash: receipt.hash as string };
-  });
+  const signer = await provider.getSigner();
+  const contract = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+  const amount = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
+  const tx = await contract.transfer(to, amount);
+  const receipt = await tx.wait(1);
+  return { txHash: receipt.hash as string };
 }
