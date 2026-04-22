@@ -26,7 +26,7 @@ export default function Navbar() {
           className="glass border-b border-white/[0.06]"
           style={{ backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)" }}
         >
-          <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-6 h-16 grid grid-cols-3 items-center">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2.5 group">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg">
@@ -38,7 +38,7 @@ export default function Navbar() {
             </Link>
 
             {/* Nav links */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 justify-center">
               {navLinks.map((link) => {
                 const active = pathname === link.href || (link.href === "/tools" && pathname.startsWith("/tools"));
                 return (
@@ -59,7 +59,7 @@ export default function Navbar() {
             </div>
 
             {/* Wallet button */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 justify-end">
               <WalletWidget />
               {address ? (
                 <button
