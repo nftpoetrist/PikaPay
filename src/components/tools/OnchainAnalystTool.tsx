@@ -255,6 +255,26 @@ function AnalysisDashboard({
             </div>
           </div>
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
+            <button
+              onClick={onReset}
+              className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-xl cursor-pointer transition-all"
+              style={{
+                color: "#c4b5fd",
+                background: "rgba(124,58,237,0.15)",
+                border: "1px solid rgba(124,58,237,0.35)",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = "rgba(124,58,237,0.28)";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(124,58,237,0.6)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = "rgba(124,58,237,0.15)";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(124,58,237,0.35)";
+              }}
+            >
+              <RotateCcw size={11} />
+              New search
+            </button>
             <span
               className="text-xs font-semibold px-2.5 py-1 rounded-full"
               style={{ background: `${trendColor}15`, color: trendColor, border: `1px solid ${trendColor}28` }}
@@ -452,8 +472,7 @@ function AnalysisDashboard({
         <p className="text-[10px]" style={{ color: "rgba(242,242,255,0.2)" }}>
           Rule-based engine · Not financial advice · Scenario modeling only
         </p>
-        <div className="flex items-center gap-2">
-          <a
+        <a
             href={`https://www.coingecko.com/en/coins/${c.name.toLowerCase().replace(/\s+/g, "-")}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -463,19 +482,6 @@ function AnalysisDashboard({
             <ExternalLink size={11} />
             CoinGecko
           </a>
-          <button
-            onClick={onReset}
-            className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-xl cursor-pointer transition-all"
-            style={{
-              color: "var(--text-muted)",
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.07)",
-            }}
-          >
-            <RotateCcw size={11} />
-            New search
-          </button>
-        </div>
       </div>
     </motion.div>
   );

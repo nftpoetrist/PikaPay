@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useEffect,
+  useRef,
   useCallback,
   ReactNode,
 } from "react";
@@ -12,11 +13,14 @@ import { ethers } from "ethers";
 import {
   connectWallet,
   connectWithProvider,
+  silentConnectWithProvider,
   getUSDCBalance,
   shortAddress,
   discoverWallets,
   EIP6963Wallet,
 } from "@/lib/wallet";
+
+const LAST_RDNS_KEY = "pikapay_last_wallet_rdns";
 
 interface WalletState {
   address: string | null;
@@ -24,14 +28,15 @@ interface WalletState {
   usdcBalance: string;
   provider: ethers.BrowserProvider | null;
   isConnecting: boolean;
+  connectError: string | null;
 
   // Multi-wallet
-  wallets: EIP6963Wallet[];           // all EIP-6963 discovered wallets
+  wallets: EIP6963Wallet[];
   showPicker: boolean;
   setShowPicker: (v: boolean) => void;
   connectWithWallet: (w: EIP6963Wallet) => Promise<void>;
 
-  connect: () => Promise<void>;       // fallback: window.ethereum
+  connect: () => Promise<void>;
   disconnect: () => void;
   refreshBalance: () => Promise<void>;
 }
@@ -42,6 +47,7 @@ const WalletContext = createContext<WalletState>({
   usdcBalance: "0",
   provider: null,
   isConnecting: false,
+  connectError: null,
   wallets: [],
   showPicker: false,
   setShowPicker: () => {},
@@ -52,18 +58,21 @@ const WalletContext = createContext<WalletState>({
 });
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [address, setAddress]     = useState<string | null>(null);
-  const [provider, setProvider]   = useState<ethers.BrowserProvider | null>(null);
-  const [usdcBalance, setBalance] = useState("0");
-  const [isConnecting, setConnecting] = useState(false);
-  const [wallets, setWallets]     = useState<EIP6963Wallet[]>([]);
-  const [showPicker, setShowPicker] = useState(false);
+  const [address, setAddress]           = useState<string | null>(null);
+  const [provider, setProvider]         = useState<ethers.BrowserProvider | null>(null);
+  const [usdcBalance, setBalance]       = useState("0");
+  const [isConnecting, setConnecting]   = useState(false);
+  const [wallets, setWallets]           = useState<EIP6963Wallet[]>([]);
+  const [showPicker, setShowPicker]     = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  // Tracks whether auto-connect has already been attempted this session
+  const autoConnectAttempted = useRef(false);
 
   // Discover all injected wallets via EIP-6963
   useEffect(() => {
     const cleanup = discoverWallets((wallet) => {
       setWallets((prev) => {
-        // Avoid duplicates by rdns
         if (prev.some((w) => w.info.rdns === wallet.info.rdns)) return prev;
         return [...prev, wallet];
       });
@@ -82,7 +91,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (result) {
         setAddress(result.address);
         setProvider(result.provider);
-        localStorage.setItem("pikapay_last_wallet", result.address);
         const bal = await getUSDCBalance(result.provider, result.address);
         setBalance(bal);
       }
@@ -90,14 +98,37 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Auto-connect: runs once when wallets are discovered, if a previous session rdns is stored
+  useEffect(() => {
+    if (autoConnectAttempted.current) return;
+    if (wallets.length === 0) return;
+    if (address) return; // already connected
+
+    const lastRdns = localStorage.getItem(LAST_RDNS_KEY);
+    if (!lastRdns) return;
+
+    const savedWallet = wallets.find((w) => w.info.rdns === lastRdns);
+    if (!savedWallet) return;
+
+    autoConnectAttempted.current = true;
+    silentConnectWithProvider(savedWallet.provider).then((result) => {
+      if (result) _finishConnect(result);
+    });
+  }, [wallets, address, _finishConnect]);
+
   /** Connect a specific EIP-6963 wallet */
   const connectWithWallet = useCallback(
     async (wallet: EIP6963Wallet) => {
       setConnecting(true);
-      setShowPicker(false);
+      setConnectError(null);
       try {
         const result = await connectWithProvider(wallet.provider);
+        localStorage.setItem(LAST_RDNS_KEY, wallet.info.rdns);
+        setShowPicker(false);
         await _finishConnect(result);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Connection failed";
+        setConnectError(msg);
       } finally {
         setConnecting(false);
       }
@@ -107,7 +138,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /** Fallback: connect via window.ethereum */
   const connect = useCallback(async () => {
-    // If we know about EIP-6963 wallets, open the picker instead
     if (wallets.length > 0) {
       setShowPicker(true);
       return;
@@ -125,7 +155,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAddress(null);
     setProvider(null);
     setBalance("0");
-    localStorage.removeItem("pikapay_last_wallet");
+    localStorage.removeItem(LAST_RDNS_KEY);
+    autoConnectAttempted.current = false;
   }, []);
 
   useEffect(() => {
@@ -140,6 +171,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         usdcBalance,
         provider,
         isConnecting,
+        connectError,
         wallets,
         showPicker,
         setShowPicker,

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Zap, ArrowRight, Wallet, Shield, Layers, ChevronRight } from "lucide-react";
+import { Zap, ArrowRight, Wallet, Shield, Layers, ChevronRight, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import PageTransition from "@/components/PageTransition";
@@ -199,48 +199,129 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {TOOLS.map((tool, i) => (
-            <motion.div
-              key={tool.slug}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.06 }}
-            >
-              <Link href={`/tools/${tool.slug}`}>
-                <Card hover className="flex flex-col gap-4 h-full group">
-                  <div className="flex items-start justify-between">
+        {/* Featured: Onchain Analyst */}
+        {(() => {
+          const featured = TOOLS.find((t) => t.slug === "onchain-analyst")!;
+          const rest = TOOLS.filter((t) => t.slug !== "onchain-analyst");
+          return (
+            <>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.45 }}
+                className="mb-4"
+              >
+                <Link href={`/tools/${featured.slug}`}>
+                  <div
+                    className="relative overflow-hidden rounded-2xl p-6 group cursor-pointer transition-all"
+                    style={{
+                      background: "linear-gradient(135deg, rgba(20,184,166,0.12) 0%, rgba(16,185,129,0.08) 50%, rgba(14,14,26,0.95) 100%)",
+                      border: "1px solid rgba(20,184,166,0.25)",
+                      boxShadow: "0 0 40px rgba(20,184,166,0.06), 0 8px 32px rgba(0,0,0,0.3)",
+                    }}
+                  >
                     <div
-                      className={`w-11 h-11 rounded-xl bg-gradient-to-br ${tool.color} flex items-center justify-center text-white font-bold shadow-lg`}
-                    >
-                      {tool.icon}
-                    </div>
-                    {tool.badge && <Badge variant="purple">{tool.badge}</Badge>}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-sm mb-1.5 group-hover:text-violet-300 transition-colors">
-                      {tool.name}
-                    </h3>
-                    <p className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                      {tool.description}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-violet-300 text-sm">
-                      ${tool.price.toFixed(tool.price < 0.01 ? 3 : 2)}{" "}
-                      <span className="font-normal text-xs" style={{ color: "var(--text-muted)" }}>USDC</span>
-                    </span>
-                    <ChevronRight
-                      size={14}
-                      className="text-white/20 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-all"
+                      className="absolute -top-10 -right-10 w-48 h-48 rounded-full pointer-events-none"
+                      style={{ background: "radial-gradient(circle, rgba(20,184,166,0.18) 0%, transparent 70%)" }}
                     />
+                    <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
+                      <div
+                        className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${featured.color} flex-shrink-0 flex items-center justify-center text-2xl shadow-lg`}
+                        style={{ boxShadow: "0 4px 20px rgba(20,184,166,0.35)" }}
+                      >
+                        {featured.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                          <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: "rgba(20,184,166,0.8)" }}>
+                            Featured Tool
+                          </p>
+                          <Badge variant="green">New</Badge>
+                          <Badge variant="mono">{featured.category}</Badge>
+                        </div>
+                        <h2 className="text-xl font-bold mb-1.5 group-hover:text-teal-300 transition-colors" style={{ letterSpacing: "-0.02em" }}>
+                          {featured.name}
+                        </h2>
+                        <p className="text-sm leading-relaxed max-w-xl" style={{ color: "var(--text-secondary)" }}>
+                          {featured.longDescription}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0 flex flex-row sm:flex-col items-center sm:items-end gap-3">
+                        <div className="text-right">
+                          <p className="text-[10px] uppercase tracking-widest mb-0.5" style={{ color: "var(--text-muted)" }}>Price</p>
+                          <p className="text-2xl font-bold" style={{ color: "#34d399", letterSpacing: "-0.03em" }}>
+                            ${featured.price.toFixed(3)}
+                            <span className="text-sm font-normal ml-1" style={{ color: "var(--text-muted)" }}>USDC</span>
+                          </p>
+                        </div>
+                        <div
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all group-hover:shadow-lg"
+                          style={{ background: "rgba(20,184,166,0.15)", border: "1px solid rgba(20,184,166,0.3)", color: "#34d399" }}
+                        >
+                          <TrendingUp size={14} />
+                          Analyze
+                          <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="relative mt-5 pt-4 flex flex-wrap gap-6" style={{ borderTop: "1px solid rgba(20,184,166,0.12)" }}>
+                      {[
+                        { icon: <Zap size={11} fill="currentColor" />, label: "Live market data" },
+                        { icon: <TrendingUp size={11} />, label: "Support & resistance levels" },
+                        { icon: <span className="text-[11px]">⚡</span>, label: "Risk scoring 0–100" },
+                        { icon: <span className="text-[11px]">🎯</span>, label: "Bull / Bear / Consolidation scenarios" },
+                      ].map(({ icon, label }) => (
+                        <div key={label} className="flex items-center gap-1.5">
+                          <span style={{ color: "rgba(20,184,166,0.7)" }}>{icon}</span>
+                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </Card>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
+                </Link>
+              </motion.div>
+
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {rest.map((tool, i) => (
+                  <motion.div
+                    key={tool.slug}
+                    initial={{ opacity: 0, y: 16 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.06 }}
+                  >
+                    <Link href={`/tools/${tool.slug}`}>
+                      <Card hover className="flex flex-col gap-4 h-full group">
+                        <div className="flex items-start justify-between">
+                          <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${tool.color} flex items-center justify-center text-white font-bold shadow-lg`}>
+                            {tool.icon}
+                          </div>
+                          {tool.badge && <Badge variant="purple">{tool.badge}</Badge>}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-sm mb-1.5 group-hover:text-violet-300 transition-colors">
+                            {tool.name}
+                          </h3>
+                          <p className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                            {tool.description}
+                          </p>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-violet-300 text-sm">
+                            ${tool.price.toFixed(tool.price < 0.01 ? 3 : 2)}{" "}
+                            <span className="font-normal text-xs" style={{ color: "var(--text-muted)" }}>USDC</span>
+                          </span>
+                          <ChevronRight size={14} className="text-white/20 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-all" />
+                        </div>
+                      </Card>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            </>
+          );
+        })()}
       </section>
 
       {/* ── CTA ────────────────────────────────────────────────── */}

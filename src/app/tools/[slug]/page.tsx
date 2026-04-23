@@ -1,15 +1,17 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import { notFound } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Fuel, Zap } from "lucide-react";
 import Link from "next/link";
 import { getToolBySlug } from "@/lib/tools";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import PageTransition from "@/components/PageTransition";
 import PaymentGate from "@/components/PaymentGate";
+import { useSessionWallet } from "@/contexts/SessionWalletContext";
+import { useWallet } from "@/contexts/WalletContext";
 
 // Tool UI components
 import SummarizerTool      from "@/components/tools/SummarizerTool";
@@ -31,8 +33,26 @@ export default function ToolPage({ params }: { params: Promise<{ slug: string }>
   const tool = getToolBySlug(slug);
   if (!tool) notFound();
 
+  const UNLOCK_KEY = `pikapay_unlock_${slug}`;
+  const UNLOCK_TTL = 60 * 60 * 1000; // 1 saat
+
   const [unlocked, setUnlocked] = useState(false);
   const ToolComponent = TOOL_COMPONENTS[slug];
+  const { gasBalance } = useSessionWallet();
+  const { address: arcAddress } = useWallet();
+
+  // Sayfa yüklendiğinde localStorage'daki unlock süresini kontrol et
+  useEffect(() => {
+    const stored = localStorage.getItem(UNLOCK_KEY);
+    if (stored && Date.now() - parseInt(stored, 10) < UNLOCK_TTL) {
+      setUnlocked(true);
+    }
+  }, [UNLOCK_KEY, UNLOCK_TTL]);
+
+  const handleUnlock = () => {
+    localStorage.setItem(UNLOCK_KEY, String(Date.now()));
+    setUnlocked(true);
+  };
 
   return (
     <PageTransition>
@@ -80,6 +100,7 @@ export default function ToolPage({ params }: { params: Promise<{ slug: string }>
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
+              className="space-y-2"
             >
               <Card variant="accent" padding="md" className="text-center">
                 <div className="w-10 h-10 rounded-full mx-auto mb-3 flex items-center justify-center"
@@ -91,13 +112,45 @@ export default function ToolPage({ params }: { params: Promise<{ slug: string }>
                   Paid ${tool.price.toFixed(3)} USDC
                 </p>
               </Card>
+
+              {/* Session wallet balance indicator — only shown when Arc wallet connected */}
+              {arcAddress && (
+                <div
+                  className="rounded-xl px-3.5 py-3 flex items-center gap-3"
+                  style={{
+                    background: "rgba(255,255,255,0.03)",
+                    border: `1px solid ${gasBalance < 0.02 ? "rgba(251,191,36,0.25)" : "rgba(255,255,255,0.07)"}`,
+                  }}
+                >
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: gasBalance < 0.02 ? "rgba(251,191,36,0.1)" : "rgba(124,58,237,0.12)" }}
+                  >
+                    {gasBalance < 0.02
+                      ? <Fuel size={14} className="text-amber-400" />
+                      : <Zap size={14} className="text-violet-400" fill="currentColor" />
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] uppercase tracking-widest mb-0.5" style={{ color: "var(--text-muted)" }}>
+                      Auto-pay balance
+                    </p>
+                    <p className="text-sm font-bold font-mono"
+                      style={{ color: gasBalance < 0.02 ? "#fbbf24" : "var(--text-primary)" }}
+                    >
+                      ${gasBalance.toFixed(4)}
+                      <span className="text-[10px] font-normal ml-1" style={{ color: "var(--text-muted)" }}>USDC</span>
+                    </p>
+                  </div>
+                </div>
+              )}
             </motion.div>
           ) : (
             <PaymentGate
               toolSlug={tool.slug}
               toolName={tool.name}
               price={tool.price}
-              onSuccess={() => setUnlocked(true)}
+              onSuccess={handleUnlock}
             />
           )}
         </div>

@@ -49,35 +49,40 @@ export function discoverWallets(onWallet: (w: EIP6963Wallet) => void): () => voi
 
 // ─── Connection helpers ────────────────────────────────────
 
-/** Wraps eth_requestAccounts with a timeout so dismissing the popup doesn't hang forever. */
+/** Request accounts directly on the raw EIP-1193 provider with a timeout. */
 async function requestAccountsWithTimeout(
-  provider: ethers.BrowserProvider,
+  eip1193: ethers.Eip1193Provider,
   timeoutMs = 30_000,
 ): Promise<void> {
+  type RawProvider = { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+  const raw = eip1193 as RawProvider;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error("Connection timed out — wallet popup was dismissed")),
       timeoutMs,
     );
-    provider
-      .send("eth_requestAccounts", [])
+    raw
+      .request({ method: "eth_requestAccounts" })
       .then(() => { clearTimeout(timer); resolve(); })
-      .catch((err) => { clearTimeout(timer); reject(err); });
+      .catch((err) => { clearTimeout(timer); reject(err as Error); });
   });
 }
 
-export async function ensureArcNetwork(provider: ethers.BrowserProvider): Promise<boolean> {
+export async function ensureArcNetwork(
+  provider: ethers.BrowserProvider,
+  eip1193?: ethers.Eip1193Provider,
+): Promise<boolean> {
   try {
     const network = await provider.getNetwork();
     if (Number(network.chainId) === ARC_CHAIN_ID) return true;
-    const eth = (window as Window & {
-      ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
-    }).ethereum;
-    if (!eth) return false;
+    // Use the specific EIP-6963 provider, not window.ethereum (which may be a conflicting wallet)
+    type RawProvider = { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+    const raw = (eip1193 as RawProvider | undefined) ?? (window as Window & { ethereum?: RawProvider }).ethereum;
+    if (!raw) return false;
     try {
-      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: ARC_CHAIN_ID_HEX }] });
+      await raw.request({ method: "wallet_switchEthereumChain", params: [{ chainId: ARC_CHAIN_ID_HEX }] });
     } catch {
-      await eth.request({ method: "wallet_addEthereumChain", params: [ARC_CHAIN_PARAMS] });
+      await raw.request({ method: "wallet_addEthereumChain", params: [ARC_CHAIN_PARAMS] });
     }
     return true;
   } catch {
@@ -85,19 +90,29 @@ export async function ensureArcNetwork(provider: ethers.BrowserProvider): Promis
   }
 }
 
-/** Connect using any EIP-1193 provider (from EIP-6963 or window.ethereum). */
+/** Connect using any EIP-1193 provider (from EIP-6963 or window.ethereum).
+ *  Throws on failure so callers can surface the error to the user. */
 export async function connectWithProvider(
   eip1193: ethers.Eip1193Provider,
+): Promise<{ address: string; provider: ethers.BrowserProvider }> {
+  await requestAccountsWithTimeout(eip1193);
+  const provider = new ethers.BrowserProvider(eip1193);
+  const ok = await ensureArcNetwork(provider, eip1193);
+  if (!ok) throw new Error("Could not switch to Arc Testnet. Please switch manually in your wallet.");
+  const signer = await provider.getSigner();
+  const address = await signer.getAddress();
+  return { address, provider };
+}
+
+/** Silent reconnect — uses eth_accounts (no popup). Returns null if not already authorized. */
+export async function silentConnectWithProvider(
+  eip1193: ethers.Eip1193Provider,
 ): Promise<{ address: string; provider: ethers.BrowserProvider } | null> {
-  // Provide explicit network info so ethers v6 never attempts ENS resolution on Arc
-  const provider = new ethers.BrowserProvider(eip1193, {
-    chainId: ARC_CHAIN_ID,
-    name: "arc-testnet",
-  });
   try {
-    await requestAccountsWithTimeout(provider);
-    const ok = await ensureArcNetwork(provider);
-    if (!ok) return null;
+    type RawProvider = { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+    const accounts = (await (eip1193 as RawProvider).request({ method: "eth_accounts" })) as string[];
+    if (!accounts || accounts.length === 0) return null;
+    const provider = new ethers.BrowserProvider(eip1193);
     const signer = await provider.getSigner();
     const address = await signer.getAddress();
     return { address, provider };
@@ -164,7 +179,8 @@ export async function approveUSDCSpender(
   await tx.wait(1);
 }
 
-/** Send real USDC on Arc Testnet. Resolves with the tx hash after 1 confirmation. */
+/** Send real USDC on Arc Testnet. Resolves with the tx hash after 1 confirmation.
+ *  Times out after 60 s. On replacement-underpriced, retries once with 1.5× gas. */
 export async function sendUSDC(
   provider: ethers.BrowserProvider,
   to: string,
@@ -173,7 +189,31 @@ export async function sendUSDC(
   const signer = await provider.getSigner();
   const contract = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
   const amount = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
-  const tx = await contract.transfer(to, amount);
-  const receipt = await tx.wait(1);
-  return { txHash: receipt.hash as string };
+
+  const waitWithTimeout = (tx: ethers.TransactionResponse) =>
+    Promise.race([
+      tx.wait(1),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Transaction timed out — Arc Testnet may be congested. Check ArcScan for status.")), 60_000),
+      ),
+    ]);
+
+  try {
+    const tx = await contract.transfer(to, amount);
+    const receipt = await waitWithTimeout(tx);
+    return { txHash: (receipt as ethers.TransactionReceipt).hash };
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    const msg  = (err as { message?: string })?.message ?? "";
+    if (code === "REPLACEMENT_UNDERPRICED" || msg.includes("replacement transaction underpriced")) {
+      // Retry with 1.5× gas to replace the stuck pending transaction
+      const feeData = await provider.getFeeData();
+      const gasPrice = feeData.gasPrice ?? ethers.parseUnits("2", "gwei");
+      const bumpedGas = (gasPrice * BigInt(150)) / BigInt(100);
+      const tx2 = await contract.transfer(to, amount, { gasPrice: bumpedGas });
+      const receipt2 = await waitWithTimeout(tx2);
+      return { txHash: (receipt2 as ethers.TransactionReceipt).hash };
+    }
+    throw err;
+  }
 }

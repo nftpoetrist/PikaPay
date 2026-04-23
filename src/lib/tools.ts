@@ -21,7 +21,7 @@ export const TOOLS: Tool[] = [
     category: "AI",
     icon: "✦",
     color: "from-violet-500 to-purple-600",
-    badge: "Popular",
+    badge: "Demo",
   },
   {
     slug: "word-counter",
@@ -33,6 +33,7 @@ export const TOOLS: Tool[] = [
     category: "Text",
     icon: "📝",
     color: "from-sky-500 to-cyan-600",
+    badge: "Demo",
   },
   {
     slug: "idea-generator",
@@ -44,7 +45,7 @@ export const TOOLS: Tool[] = [
     category: "AI",
     icon: "💡",
     color: "from-amber-500 to-orange-500",
-    badge: "New",
+    badge: "Demo",
   },
   {
     slug: "text-formatter",
@@ -56,6 +57,7 @@ export const TOOLS: Tool[] = [
     category: "Text",
     icon: "Aa",
     color: "from-emerald-500 to-teal-600",
+    badge: "Demo",
   },
   {
     slug: "onchain-analyst",

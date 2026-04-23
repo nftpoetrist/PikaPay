@@ -14,7 +14,7 @@ function Portal({ children }: { children: ReactNode }) {
 }
 
 export default function WalletPickerModal() {
-  const { wallets, showPicker, setShowPicker, connectWithWallet, isConnecting } = useWallet();
+  const { wallets, showPicker, setShowPicker, connectWithWallet, isConnecting, connectError } = useWallet();
 
   return (
     <Portal>
@@ -120,7 +120,12 @@ export default function WalletPickerModal() {
                 )}
               </div>
 
-              <div className="px-5 pb-4 pt-1">
+              <div className="px-5 pb-4 pt-1 space-y-2">
+                {connectError && (
+                  <p className="text-[11px] text-center rounded-lg px-3 py-2" style={{ color: "#f87171", background: "rgba(239,68,68,0.1)" }}>
+                    {connectError}
+                  </p>
+                )}
                 <p className="text-[10px] text-center" style={{ color: "var(--text-muted)" }}>
                   Arc Testnet (Chain ID 5042002) required
                 </p>

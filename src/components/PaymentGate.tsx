@@ -118,6 +118,7 @@ export default function PaymentGate({ toolSlug, toolName, price, onSuccess }: Pr
       let friendly = msg;
       if (msg.includes("user rejected")) friendly = "Transaction rejected by user.";
       else if (msg.includes("txpool is full")) friendly = "Arc Testnet is congested. Please try again in a few seconds.";
+      else if (msg.includes("timed out")) friendly = "Transaction timed out — Arc Testnet is slow right now. Check ArcScan or try again.";
       setErrorMsg(friendly);
       setStep("error");
     }

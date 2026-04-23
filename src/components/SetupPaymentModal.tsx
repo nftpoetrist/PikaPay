@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap, Shield, X, CheckCircle2, AlertTriangle, Wallet, Fuel } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { approveSessionWallet, fundSessionWallet, APPROVE_AMOUNT, FUND_AMOUNT } from "@/lib/sessionWallet";
+import { approveSessionWallet, fundSessionWallet, FUND_AMOUNT } from "@/lib/sessionWallet";
 import { ethers } from "ethers";
 
 function Portal({ children }: { children: ReactNode }) {
@@ -21,37 +21,62 @@ interface Props {
   open: boolean;
   sessionAddress: string;
   provider: ethers.BrowserProvider;
-  mode: "setup" | "refill"; // full setup or just refill gas
+  mode: "setup" | "refill";
   onDone: () => void;
   onClose: () => void;
 }
 
+const APPROVE_PRESETS = [5, 10, 25, 50];
+const FUND_PRESETS    = [0.10, 0.25, 0.50, 1.00];
+
 export default function SetupPaymentModal({ open, sessionAddress, provider, mode, onDone, onClose }: Props) {
-  const [step, setStep] = useState<Step>("intro");
+  const [step, setStep]         = useState<Step>("intro");
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Customizable amounts
+  const [approveAmt, setApproveAmt] = useState(10);
+  const [fundAmt, setFundAmt]       = useState(FUND_AMOUNT);
+  const [approveInput, setApproveInput] = useState("10");
+  const [fundInput, setFundInput]       = useState(String(FUND_AMOUNT));
+
   useEffect(() => {
-    if (open) { setStep("intro"); setErrorMsg(""); }
+    if (open) {
+      setStep("intro");
+      setErrorMsg("");
+      setApproveAmt(10);
+      setFundAmt(FUND_AMOUNT);
+      setApproveInput("10");
+      setFundInput(String(FUND_AMOUNT));
+    }
   }, [open]);
 
   const shortSession = sessionAddress
     ? `${sessionAddress.slice(0, 8)}…${sessionAddress.slice(-6)}`
     : "";
 
+  const handleApproveInput = (val: string) => {
+    setApproveInput(val);
+    const n = parseFloat(val);
+    if (!isNaN(n) && n > 0) setApproveAmt(n);
+  };
+
+  const handleFundInput = (val: string) => {
+    setFundInput(val);
+    const n = parseFloat(val);
+    if (!isNaN(n) && n > 0) setFundAmt(n);
+  };
+
   const handleStart = async () => {
     setErrorMsg("");
     try {
       if (mode === "setup") {
-        // Step 1: Approve
         setStep("approving");
-        await approveSessionWallet(provider);
+        await approveSessionWallet(provider, approveAmt);
         setStep("approved");
-        // Small delay so user sees the checkmark
         await new Promise(r => setTimeout(r, 600));
       }
-      // Step 2: Fund
       setStep("funding");
-      await fundSessionWallet(provider);
+      await fundSessionWallet(provider, fundAmt);
       setStep("done");
       setTimeout(onDone, 1200);
     } catch (err: unknown) {
@@ -119,44 +144,81 @@ export default function SetupPaymentModal({ open, sessionAddress, provider, mode
                   )}
                 </div>
 
-                {/* Steps (setup mode) */}
+                {/* Setup mode steps */}
                 {mode === "setup" && (
                   <div className="space-y-2">
-                    {/* Step 1 */}
-                    <div className="flex items-start gap-3 rounded-xl px-3.5 py-3"
+                    {/* Step 1: Approve */}
+                    <div className="rounded-xl px-3.5 py-3 space-y-2.5"
                       style={{
                         background: (step === "approving" || step === "intro")
                           ? "rgba(124,58,237,0.08)" : "rgba(52,211,153,0.06)",
                         border: `1px solid ${(step === "approving" || step === "intro")
                           ? "rgba(124,58,237,0.2)" : "rgba(52,211,153,0.18)"}`,
                       }}>
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                        style={{
-                          background: step === "approving"
-                            ? "rgba(124,58,237,0.2)"
-                            : step === "intro" ? "rgba(255,255,255,0.06)"
-                            : "rgba(52,211,153,0.15)",
-                        }}>
-                        {step !== "intro" && step !== "approving"
-                          ? <CheckCircle2 size={14} className="text-emerald-400" />
-                          : <Shield size={14} className={step === "approving" ? "text-violet-400" : "text-white/30"} />
-                        }
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{
+                            background: step === "approving"
+                              ? "rgba(124,58,237,0.2)"
+                              : step === "intro" ? "rgba(255,255,255,0.06)"
+                              : "rgba(52,211,153,0.15)",
+                          }}>
+                          {step !== "intro" && step !== "approving"
+                            ? <CheckCircle2 size={14} className="text-emerald-400" />
+                            : <Shield size={14} className={step === "approving" ? "text-violet-400" : "text-white/30"} />
+                          }
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                            Approve session wallet
+                          </p>
+                          <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                            Max spend limit for auto-pay
+                          </p>
+                        </div>
+                        {step === "approving" && (
+                          <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        )}
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
-                          Approve session wallet
-                        </p>
-                        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                          Allow it to charge up to {APPROVE_AMOUNT} USDC on your behalf
-                        </p>
-                      </div>
-                      {step === "approving" && (
-                        <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin flex-shrink-0 mt-1.5 ml-auto" />
+
+                      {/* Approve amount picker — only in intro/error */}
+                      {(step === "intro" || step === "error") && (
+                        <div className="space-y-1.5">
+                          <div className="flex gap-1.5">
+                            {APPROVE_PRESETS.map(p => (
+                              <button key={p}
+                                onClick={() => { setApproveAmt(p); setApproveInput(String(p)); }}
+                                className="flex-1 text-[11px] font-semibold py-1 rounded-lg transition-all cursor-pointer"
+                                style={{
+                                  background: approveAmt === p ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.05)",
+                                  border: `1px solid ${approveAmt === p ? "rgba(124,58,237,0.5)" : "rgba(255,255,255,0.08)"}`,
+                                  color: approveAmt === p ? "#c4b5fd" : "var(--text-muted)",
+                                }}
+                              >
+                                ${p}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+                            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                            <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Custom:</span>
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="1"
+                              value={approveInput}
+                              onChange={e => handleApproveInput(e.target.value)}
+                              className="flex-1 bg-transparent text-[11px] font-mono outline-none"
+                              style={{ color: "var(--text-primary)" }}
+                            />
+                            <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>USDC</span>
+                          </div>
+                        </div>
                       )}
                     </div>
 
-                    {/* Step 2 */}
-                    <div className="flex items-start gap-3 rounded-xl px-3.5 py-3"
+                    {/* Step 2: Fund */}
+                    <div className="rounded-xl px-3.5 py-3 space-y-2.5"
                       style={{
                         background: step === "funding"
                           ? "rgba(124,58,237,0.08)" : step === "done"
@@ -165,27 +227,64 @@ export default function SetupPaymentModal({ open, sessionAddress, provider, mode
                           ? "rgba(124,58,237,0.2)" : step === "done"
                           ? "rgba(52,211,153,0.18)" : "rgba(255,255,255,0.06)"}`,
                       }}>
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                        style={{
-                          background: step === "funding"
-                            ? "rgba(124,58,237,0.2)" : step === "done"
-                            ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.06)",
-                        }}>
-                        {step === "done"
-                          ? <CheckCircle2 size={14} className="text-emerald-400" />
-                          : <Fuel size={14} className={step === "funding" ? "text-violet-400" : "text-white/30"} />
-                        }
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{
+                            background: step === "funding"
+                              ? "rgba(124,58,237,0.2)" : step === "done"
+                              ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.06)",
+                          }}>
+                          {step === "done"
+                            ? <CheckCircle2 size={14} className="text-emerald-400" />
+                            : <Fuel size={14} className={step === "funding" ? "text-violet-400" : "text-white/30"} />
+                          }
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                            Fund gas wallet
+                          </p>
+                          <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                            USDC sent to session wallet for fees
+                          </p>
+                        </div>
+                        {step === "funding" && (
+                          <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        )}
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
-                          Fund gas ({FUND_AMOUNT} USDC)
-                        </p>
-                        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                          Covers ~{Math.floor(FUND_AMOUNT / 0.0001).toLocaleString()}+ automated transactions
-                        </p>
-                      </div>
-                      {step === "funding" && (
-                        <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin flex-shrink-0 mt-1.5 ml-auto" />
+
+                      {/* Fund amount picker — only in intro/error */}
+                      {(step === "intro" || step === "error") && (
+                        <div className="space-y-1.5">
+                          <div className="flex gap-1.5">
+                            {FUND_PRESETS.map(p => (
+                              <button key={p}
+                                onClick={() => { setFundAmt(p); setFundInput(String(p)); }}
+                                className="flex-1 text-[11px] font-semibold py-1 rounded-lg transition-all cursor-pointer"
+                                style={{
+                                  background: fundAmt === p ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.05)",
+                                  border: `1px solid ${fundAmt === p ? "rgba(124,58,237,0.5)" : "rgba(255,255,255,0.08)"}`,
+                                  color: fundAmt === p ? "#c4b5fd" : "var(--text-muted)",
+                                }}
+                              >
+                                ${p.toFixed(2)}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+                            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                            <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Custom:</span>
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={fundInput}
+                              onChange={e => handleFundInput(e.target.value)}
+                              className="flex-1 bg-transparent text-[11px] font-mono outline-none"
+                              style={{ color: "var(--text-primary)" }}
+                            />
+                            <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>USDC</span>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -193,14 +292,50 @@ export default function SetupPaymentModal({ open, sessionAddress, provider, mode
 
                 {/* Refill mode */}
                 {mode === "refill" && (
-                  <div className="rounded-xl px-3.5 py-3 space-y-1"
-                    style={{ background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.18)" }}>
-                    <div className="flex items-center gap-2">
-                      <Fuel size={13} className="text-amber-400" />
-                      <p className="text-xs font-semibold text-amber-300">Session wallet needs gas</p>
+                  <div className="space-y-2">
+                    <div className="rounded-xl px-3.5 py-3 space-y-2.5"
+                      style={{ background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.18)" }}>
+                      <div className="flex items-center gap-2">
+                        <Fuel size={13} className="text-amber-400" />
+                        <p className="text-xs font-semibold text-amber-300">Session wallet needs gas</p>
+                      </div>
+
+                      {(step === "intro" || step === "error") && (
+                        <div className="space-y-1.5">
+                          <div className="flex gap-1.5">
+                            {FUND_PRESETS.map(p => (
+                              <button key={p}
+                                onClick={() => { setFundAmt(p); setFundInput(String(p)); }}
+                                className="flex-1 text-[11px] font-semibold py-1 rounded-lg transition-all cursor-pointer"
+                                style={{
+                                  background: fundAmt === p ? "rgba(251,191,36,0.25)" : "rgba(255,255,255,0.05)",
+                                  border: `1px solid ${fundAmt === p ? "rgba(251,191,36,0.45)" : "rgba(255,255,255,0.08)"}`,
+                                  color: fundAmt === p ? "#fde68a" : "var(--text-muted)",
+                                }}
+                              >
+                                ${p.toFixed(2)}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+                            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                            <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Custom:</span>
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={fundInput}
+                              onChange={e => handleFundInput(e.target.value)}
+                              className="flex-1 bg-transparent text-[11px] font-mono outline-none"
+                              style={{ color: "var(--text-primary)" }}
+                            />
+                            <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>USDC</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                      Send {FUND_AMOUNT} USDC to cover automated payments. One MetaMask confirmation.
+                      One MetaMask confirmation required.
                     </p>
                   </div>
                 )}
@@ -222,7 +357,7 @@ export default function SetupPaymentModal({ open, sessionAddress, provider, mode
                   </div>
                 )}
 
-                {/* Done state */}
+                {/* Done */}
                 {step === "done" && (
                   <div className="flex items-center gap-2 rounded-xl px-3.5 py-3"
                     style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)" }}>
@@ -245,7 +380,9 @@ export default function SetupPaymentModal({ open, sessionAddress, provider, mode
                       icon={<Zap size={13} fill="currentColor" />}
                       className="flex-1"
                     >
-                      {mode === "refill" ? `Send ${FUND_AMOUNT} USDC` : "Set Up (2 steps)"}
+                      {mode === "refill"
+                        ? `Send $${fundAmt.toFixed(2)} USDC`
+                        : `Set Up · $${approveAmt} limit`}
                     </Button>
                   </div>
                 )}
