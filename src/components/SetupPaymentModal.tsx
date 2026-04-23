@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Shield, X, CheckCircle2, AlertTriangle, Wallet, Fuel } from "lucide-react";
+import { Zap, Shield, X, CheckCircle2, AlertTriangle, Wallet, Fuel, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { approveSessionWallet, fundSessionWallet, FUND_AMOUNT } from "@/lib/sessionWallet";
 import { ethers } from "ethers";
@@ -32,6 +32,7 @@ const FUND_PRESETS    = [0.10, 0.25, 0.50, 1.00];
 export default function SetupPaymentModal({ open, sessionAddress, provider, mode, onDone, onClose }: Props) {
   const [step, setStep]         = useState<Step>("intro");
   const [errorMsg, setErrorMsg] = useState("");
+  const [txHash, setTxHash]     = useState<string | null>(null);
 
   // Customizable amounts
   const [approveAmt, setApproveAmt] = useState(10);
@@ -43,6 +44,7 @@ export default function SetupPaymentModal({ open, sessionAddress, provider, mode
     if (open) {
       setStep("intro");
       setErrorMsg("");
+      setTxHash(null);
       setApproveAmt(10);
       setFundAmt(FUND_AMOUNT);
       setApproveInput("10");
@@ -68,15 +70,17 @@ export default function SetupPaymentModal({ open, sessionAddress, provider, mode
 
   const handleStart = async () => {
     setErrorMsg("");
+    setTxHash(null);
     try {
       if (mode === "setup") {
         setStep("approving");
-        await approveSessionWallet(provider, approveAmt);
+        await approveSessionWallet(provider, approveAmt, (hash) => setTxHash(hash));
+        setTxHash(null);
         setStep("approved");
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 400));
       }
       setStep("funding");
-      await fundSessionWallet(provider, fundAmt);
+      await fundSessionWallet(provider, fundAmt, (hash) => setTxHash(hash));
       setStep("done");
       setTimeout(onDone, 1200);
     } catch (err: unknown) {
@@ -347,6 +351,21 @@ export default function SetupPaymentModal({ open, sessionAddress, provider, mode
                   <span>Session wallet: </span>
                   <span className="font-mono" style={{ color: "var(--text-secondary)" }}>{shortSession}</span>
                 </div>
+
+                {/* Tx hash — shown while waiting for confirmation */}
+                {txHash && (
+                  <a
+                    href={`https://testnet.arcscan.app/tx/${txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-1.5 rounded-lg transition-colors"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(242,242,255,0.35)" }}
+                  >
+                    <ExternalLink size={9} className="flex-shrink-0" />
+                    <span className="truncate">{txHash.slice(0, 18)}…{txHash.slice(-8)}</span>
+                    <span className="ml-auto flex-shrink-0" style={{ color: "rgba(251,191,36,0.7)" }}>confirming…</span>
+                  </a>
+                )}
 
                 {/* Error */}
                 {step === "error" && errorMsg && (

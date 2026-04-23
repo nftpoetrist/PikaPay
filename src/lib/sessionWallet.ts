@@ -5,12 +5,14 @@ export const ARC_CHAIN_ID   = 5042002;
 export const USDC_ADDR      = "0x3600000000000000000000000000000000000000";
 export const USDC_DECIMALS  = 6;
 
-// Minimum USDC in session wallet to pay gas — refill prompt below this
 export const MIN_GAS_BALANCE = 0.02;
-// Amount funded to session wallet on setup
 export const FUND_AMOUNT     = 0.10;
-// How much each search approves total
 export const APPROVE_AMOUNT  = 10;
+
+// Gas limits — explicit values skip eth_estimateGas on each tx (~200ms saved)
+const GAS_APPROVE      = 70_000;
+const GAS_TRANSFER     = 70_000;
+const GAS_TRANSFER_FROM = 80_000;
 
 const SESSION_KEY = "pikapay_session_key";
 
@@ -23,14 +25,15 @@ const USDC_ABI = [
 ];
 
 function arcProvider(): ethers.JsonRpcProvider {
-  return new ethers.JsonRpcProvider(
+  const p = new ethers.JsonRpcProvider(
     ARC_RPC,
     { chainId: ARC_CHAIN_ID, name: "arc-testnet" },
-    { staticNetwork: true },
+    { staticNetwork: true },  // skips eth_chainId on every call
   );
+  p.pollingInterval = 500;  // Arc has sub-second finality — poll every 500ms
+  return p;
 }
 
-/** Return stored session wallet or create a fresh one. */
 export function getSessionWallet(): ethers.Wallet {
   if (typeof window === "undefined") return new ethers.Wallet(ethers.Wallet.createRandom().privateKey);
   let pk = localStorage.getItem(SESSION_KEY);
@@ -41,12 +44,10 @@ export function getSessionWallet(): ethers.Wallet {
   return new ethers.Wallet(pk, arcProvider());
 }
 
-/** Delete session wallet key — forces new key on next call. */
 export function resetSessionWallet(): void {
   if (typeof window !== "undefined") localStorage.removeItem(SESSION_KEY);
 }
 
-/** USDC balance of the session wallet (for gas). */
 export async function getSessionGasBalance(): Promise<number> {
   const wallet = getSessionWallet();
   const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, wallet.provider!);
@@ -54,7 +55,6 @@ export async function getSessionGasBalance(): Promise<number> {
   return parseFloat(ethers.formatUnits(bal, USDC_DECIMALS));
 }
 
-/** How much USDC the session wallet is approved to pull from `owner`. */
 export async function getSessionAllowance(owner: string): Promise<number> {
   const wallet = getSessionWallet();
   const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, wallet.provider!);
@@ -62,34 +62,31 @@ export async function getSessionAllowance(owner: string): Promise<number> {
   return parseFloat(ethers.formatUnits(allowance, USDC_DECIMALS));
 }
 
-/**
- * Step 1 of setup: user approves session wallet via MetaMask.
- * Called with the user's BrowserProvider signer.
- */
 export async function approveSessionWallet(
   userProvider: ethers.BrowserProvider,
   amountHuman = APPROVE_AMOUNT,
+  onSubmitted?: (txHash: string) => void,
 ): Promise<void> {
-  const signer = await userProvider.getSigner();
-  const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+  const signer      = await userProvider.getSigner();
+  const usdc        = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
   const sessionAddr = getSessionWallet().address;
-  const amount = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
-  const tx = await usdc.approve(sessionAddr, amount);
+  const amount      = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
+  const tx          = await usdc.approve(sessionAddr, amount, { gasLimit: GAS_APPROVE });
+  onSubmitted?.(tx.hash);
   await tx.wait(1);
 }
 
-/**
- * Step 2 of setup: fund session wallet with USDC for gas via MetaMask.
- */
 export async function fundSessionWallet(
   userProvider: ethers.BrowserProvider,
   amountHuman = FUND_AMOUNT,
+  onSubmitted?: (txHash: string) => void,
 ): Promise<void> {
-  const signer = await userProvider.getSigner();
-  const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+  const signer      = await userProvider.getSigner();
+  const usdc        = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
   const sessionAddr = getSessionWallet().address;
-  const amount = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
-  const tx = await usdc.transfer(sessionAddr, amount);
+  const amount      = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
+  const tx          = await usdc.transfer(sessionAddr, amount, { gasLimit: GAS_TRANSFER });
+  onSubmitted?.(tx.hash);
   await tx.wait(1);
 }
 
@@ -110,24 +107,22 @@ async function retryOnTxpoolFull<T>(fn: () => Promise<T>, maxAttempts = 4): Prom
   throw new Error("Unreachable");
 }
 
-/**
- * Collect a micro-payment.
- * Session wallet calls transferFrom(userMainWallet → merchant, amount).
- * No MetaMask popup — fully automated. Retries up to 3× on txpool full.
- */
+/** Automated micropayment — no MetaMask popup.
+ *  Explicit gasLimit skips eth_estimateGas. Fast polling matches Arc finality. */
 export async function collectWithSessionWallet(
   fromAddress: string,
   toAddress:   string,
   amountHuman: number,
 ): Promise<string> {
   const wallet = getSessionWallet();
-  const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, wallet);
+  const usdc   = new ethers.Contract(USDC_ADDR, USDC_ABI, wallet);
   const amount = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
   return retryOnTxpoolFull(async () => {
     const tx = await usdc.transferFrom(
       ethers.getAddress(fromAddress),
       ethers.getAddress(toAddress),
       amount,
+      { gasLimit: GAS_TRANSFER_FROM },
     );
     const receipt = await tx.wait(1);
     return (receipt as ethers.TransactionReceipt).hash;
