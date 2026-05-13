@@ -90,6 +90,19 @@ export async function fundSessionWallet(
   await tx.wait(1);
 }
 
+export async function withdrawFromSessionWallet(
+  toAddress: string,
+  amountHuman: number,
+  onSubmitted?: (txHash: string) => void,
+): Promise<void> {
+  const wallet = getSessionWallet();
+  const usdc   = new ethers.Contract(USDC_ADDR, USDC_ABI, wallet);
+  const amount = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
+  const tx     = await usdc.transfer(ethers.getAddress(toAddress), amount, { gasLimit: GAS_TRANSFER });
+  onSubmitted?.(tx.hash);
+  await tx.wait(1);
+}
+
 function isTxpoolFull(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return msg.toLowerCase().includes("txpool is full");

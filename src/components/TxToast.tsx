@@ -18,12 +18,17 @@ export interface TxToastProps {
   visible: boolean;
   txHash: string;
   amount: number;
-  toolName: string;
+  title?: string;
+  subtitle?: string;
+  /** @deprecated use title/subtitle */
+  toolName?: string;
 }
 
-export default function TxToast({ visible, txHash, amount, toolName }: TxToastProps) {
-  const shortHash = txHash ? `${txHash.slice(0, 10)}…${txHash.slice(-6)}` : "";
+export default function TxToast({ visible, txHash, amount, title, subtitle, toolName }: TxToastProps) {
+  const shortHash   = txHash ? `${txHash.slice(0, 10)}…${txHash.slice(-6)}` : "";
   const explorerUrl = txHash ? `${ARCSCAN}/tx/${txHash}` : "#";
+  const heading     = title   ?? `Access granted · Paid $${amount.toFixed(3)} USDC`;
+  const sub         = subtitle ?? toolName ?? "";
 
   return (
     <Portal>
@@ -53,20 +58,19 @@ export default function TxToast({ visible, txHash, amount, toolName }: TxToastPr
 
             {/* Content */}
             <div className="flex-1 min-w-0">
-              {/* Top row */}
               <div className="flex items-center gap-1.5 mb-0.5">
                 <CheckCircle2 size={12} className="text-emerald-400 flex-shrink-0" />
                 <p className="text-xs font-semibold" style={{ color: "#34d399" }}>
-                  Access granted · Paid ${amount.toFixed(3)} USDC
+                  {heading}
                 </p>
               </div>
 
-              {/* Tool name */}
-              <p className="text-[11px] mb-2 truncate" style={{ color: "rgba(242,242,255,0.4)" }}>
-                {toolName}
-              </p>
+              {sub && (
+                <p className="text-[11px] mb-2 truncate" style={{ color: "rgba(242,242,255,0.4)" }}>
+                  {sub}
+                </p>
+              )}
 
-              {/* Tx hash + ArcScan link */}
               <a
                 href={explorerUrl}
                 target="_blank"
@@ -82,9 +86,7 @@ export default function TxToast({ visible, txHash, amount, toolName }: TxToastPr
               >
                 <span>{shortHash}</span>
                 <ExternalLink size={10} />
-                <span style={{ color: "rgba(196,181,253,0.6)", fontFamily: "sans-serif" }}>
-                  ArcScan
-                </span>
+                <span style={{ color: "rgba(196,181,253,0.6)", fontFamily: "sans-serif" }}>ArcScan</span>
               </a>
             </div>
           </motion.div>

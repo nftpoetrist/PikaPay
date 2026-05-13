@@ -3,13 +3,15 @@
 import { use, useState, useEffect } from "react";
 import { notFound } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowLeft, Fuel, Zap } from "lucide-react";
+import { ArrowLeft, Fuel, Zap, Plus, ArrowUpCircle } from "lucide-react";
 import Link from "next/link";
 import { getToolBySlug } from "@/lib/tools";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import PageTransition from "@/components/PageTransition";
 import PaymentGate from "@/components/PaymentGate";
+import SetupPaymentModal from "@/components/SetupPaymentModal";
+import TxToast from "@/components/TxToast";
 import { useSessionWallet } from "@/contexts/SessionWalletContext";
 import { useWallet } from "@/contexts/WalletContext";
 
@@ -37,9 +39,19 @@ export default function ToolPage({ params }: { params: Promise<{ slug: string }>
   const UNLOCK_TTL = 60 * 60 * 1000; // 1 saat
 
   const [unlocked, setUnlocked] = useState(false);
+  const [walletModal, setWalletModal] = useState<"refill" | "withdraw" | null>(null);
+  const [toast, setToast] = useState<{ visible: boolean; txHash: string; amount: number; title: string } | null>(null);
+
+  const showToast = (txHash: string, amount: number, mode: "setup" | "refill" | "withdraw") => {
+    const title = mode === "withdraw"
+      ? `Withdrawn $${amount.toFixed(3)} USDC`
+      : `Added $${amount.toFixed(3)} USDC to session wallet`;
+    setToast({ visible: true, txHash, amount, title });
+    setTimeout(() => setToast(t => t ? { ...t, visible: false } : t), 4000);
+  };
   const ToolComponent = TOOL_COMPONENTS[slug];
-  const { gasBalance } = useSessionWallet();
-  const { address: arcAddress } = useWallet();
+  const { gasBalance, sessionAddress, checkSetup } = useSessionWallet();
+  const { address: arcAddress, provider: arcProvider } = useWallet();
 
   // Sayfa yüklendiğinde localStorage'daki unlock süresini kontrol et
   useEffect(() => {
@@ -115,34 +127,83 @@ export default function ToolPage({ params }: { params: Promise<{ slug: string }>
 
               {/* Session wallet balance indicator — only shown when Arc wallet connected */}
               {arcAddress && (
-                <div
-                  className="rounded-xl px-3.5 py-3 flex items-center gap-3"
-                  style={{
-                    background: "rgba(255,255,255,0.03)",
-                    border: `1px solid ${gasBalance < 0.02 ? "rgba(251,191,36,0.25)" : "rgba(255,255,255,0.07)"}`,
-                  }}
-                >
+                <>
                   <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: gasBalance < 0.02 ? "rgba(251,191,36,0.1)" : "rgba(124,58,237,0.12)" }}
+                    className="rounded-xl px-3.5 py-3 flex items-center gap-3"
+                    style={{
+                      background: "rgba(255,255,255,0.03)",
+                      border: `1px solid ${gasBalance < 0.02 ? "rgba(251,191,36,0.25)" : "rgba(255,255,255,0.07)"}`,
+                    }}
                   >
-                    {gasBalance < 0.02
-                      ? <Fuel size={14} className="text-amber-400" />
-                      : <Zap size={14} className="text-violet-400" fill="currentColor" />
-                    }
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] uppercase tracking-widest mb-0.5" style={{ color: "var(--text-muted)" }}>
-                      Auto-pay balance
-                    </p>
-                    <p className="text-sm font-bold font-mono"
-                      style={{ color: gasBalance < 0.02 ? "#fbbf24" : "var(--text-primary)" }}
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background: gasBalance < 0.02 ? "rgba(251,191,36,0.1)" : "rgba(124,58,237,0.12)" }}
                     >
-                      ${gasBalance.toFixed(4)}
-                      <span className="text-[10px] font-normal ml-1" style={{ color: "var(--text-muted)" }}>USDC</span>
-                    </p>
+                      {gasBalance < 0.02
+                        ? <Fuel size={14} className="text-amber-400" />
+                        : <Zap size={14} className="text-violet-400" fill="currentColor" />
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] uppercase tracking-widest mb-0.5" style={{ color: "var(--text-muted)" }}>
+                        Auto-pay balance
+                      </p>
+                      <p className="text-sm font-bold font-mono"
+                        style={{ color: gasBalance < 0.02 ? "#fbbf24" : "var(--text-primary)" }}
+                      >
+                        ${gasBalance.toFixed(4)}
+                        <span className="text-[10px] font-normal ml-1" style={{ color: "var(--text-muted)" }}>USDC</span>
+                      </p>
+                    </div>
+                    {/* Add / Withdraw buttons */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => setWalletModal("refill")}
+                        title="Add funds"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer"
+                        style={{ background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.2)" }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(124,58,237,0.25)"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(124,58,237,0.12)"; }}
+                      >
+                        <Plus size={13} className="text-violet-400" />
+                      </button>
+                      <button
+                        onClick={() => setWalletModal("withdraw")}
+                        title="Withdraw funds"
+                        disabled={gasBalance <= 0}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        style={{ background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.18)" }}
+                        onMouseEnter={e => { if (gasBalance > 0) (e.currentTarget as HTMLElement).style.background = "rgba(52,211,153,0.22)"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(52,211,153,0.1)"; }}
+                      >
+                        <ArrowUpCircle size={13} className="text-emerald-400" />
+                      </button>
+                    </div>
                   </div>
-                </div>
+
+                  {/* Wallet manage modals */}
+                  {arcProvider && (
+                    <SetupPaymentModal
+                      open={walletModal === "refill"}
+                      sessionAddress={sessionAddress}
+                      provider={arcProvider}
+                      mode="refill"
+                      onDone={() => { setWalletModal(null); checkSetup(); }}
+                      onClose={() => setWalletModal(null)}
+                      onTxComplete={showToast}
+                    />
+                  )}
+                  <SetupPaymentModal
+                    open={walletModal === "withdraw"}
+                    sessionAddress={sessionAddress}
+                    mode="withdraw"
+                    currentBalance={gasBalance}
+                    withdrawTo={arcAddress}
+                    onDone={() => { setWalletModal(null); checkSetup(); }}
+                    onClose={() => setWalletModal(null)}
+                    onTxComplete={showToast}
+                  />
+                </>
               )}
             </motion.div>
           ) : (
@@ -171,6 +232,15 @@ export default function ToolPage({ params }: { params: Promise<{ slug: string }>
         </motion.div>
       </div>
     </div>
+
+    {toast && (
+      <TxToast
+        visible={toast.visible}
+        txHash={toast.txHash}
+        amount={toast.amount}
+        title={toast.title}
+      />
+    )}
     </PageTransition>
   );
 }
