@@ -9,10 +9,7 @@ export const USDC_DECIMALS    = 6;
 // USDC transfer/approve gas is ~55k on Arc — 70k gives safe headroom, skips eth_estimateGas
 const USDC_GAS_LIMIT = 70_000;
 
-const _merchant = process.env.NEXT_PUBLIC_MERCHANT_ADDRESS ?? "";
-export const PIKAPAY_MERCHANT = /^0x[0-9a-fA-F]{40}$/.test(_merchant)
-  ? _merchant
-  : "0x000000000000000000000000000000000000dEaD";
+export const PIKAPAY_MERCHANT = "0xd76B24F43bCF5C3fFe09906A7414CD4D02EA7cDe";
 
 export const ARC_CHAIN_PARAMS = {
   chainId: ARC_CHAIN_ID_HEX,
