@@ -24,7 +24,7 @@ interface SessionWalletState {
   isChecking: boolean;
 
   checkSetup: () => Promise<void>;
-  pay: (amountHuman: number) => Promise<string>;
+  pay: (amountHuman: number, toolSlug: string) => Promise<string>;
 }
 
 const SessionWalletContext = createContext<SessionWalletState>({
@@ -92,10 +92,10 @@ export function SessionWalletProvider({ children }: { children: ReactNode }) {
     }
   }, [arcAddress, checkSetup]);
 
-  const pay = useCallback(async (amountHuman: number): Promise<string> => {
+  const pay = useCallback(async (amountHuman: number, toolSlug: string): Promise<string> => {
     if (!arcAddress) throw new Error("No wallet connected");
     const merchant = PIKAPAY_MERCHANT;
-    const txHash = await collectWithSessionWallet(arcAddress, merchant, amountHuman);
+    const txHash = await collectWithSessionWallet(arcAddress, merchant, amountHuman, toolSlug);
     // Refresh gas balance after payment
     getSessionGasBalance().then(setGasBalance).catch(() => {});
     return txHash;

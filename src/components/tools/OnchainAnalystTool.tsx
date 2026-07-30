@@ -11,9 +11,11 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useSessionWallet } from "@/contexts/SessionWalletContext";
 import TxToast from "@/components/TxToast";
 import SetupPaymentModal from "@/components/SetupPaymentModal";
+import ReceiptModal from "@/components/ReceiptModal";
 
 const TOOL_PRICE = 0.015;
 const TOOL_NAME  = "Onchain Investment Analyst";
+const TOOL_SLUG  = "onchain-analyst";
 
 // ─── API types ────────────────────────────────────────────
 
@@ -137,11 +139,11 @@ function RiskGauge({ score, category }: { score: number; category: string }) {
   const color = RISK_COLORS[category];
   return (
     <div>
-      <div className="flex items-baseline gap-1.5 mb-2">
+      <div className="flex items-baseline gap-1.5 mb-2 flex-wrap">
         <span className="text-4xl font-bold" style={{ color, letterSpacing: "-0.04em" }}>{score}</span>
         <span className="text-sm" style={{ color: "rgba(242,242,255,0.3)" }}>/100</span>
         <span
-          className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full"
+          className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
           style={{ background: `${color}15`, color, border: `1px solid ${color}28` }}
         >
           {category}
@@ -506,6 +508,7 @@ export default function OnchainAnalystTool() {
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [toastVisible, setToastVisible]     = useState(false);
   const [toastTxHash, setToastTxHash]       = useState("");
+  const [showReceipt, setShowReceipt]       = useState(false);
   const pendingCoinRef = useRef<CoinSuggestion | null>(null);
 
   const inputRef    = useRef<HTMLInputElement>(null);
@@ -568,7 +571,7 @@ export default function OnchainAnalystTool() {
       // Fetch market data + collect payment in parallel
       const marketPromise = fetch(`/api/crypto/market?id=${encodeURIComponent(coin.id)}`);
       const payPromise = (arcAddress && session.setupStatus === "ready")
-        ? session.pay(TOOL_PRICE).then(txHash => ({ txHash })).catch(() => null)
+        ? session.pay(TOOL_PRICE, TOOL_SLUG).then(txHash => ({ txHash })).catch(() => null)
         : Promise.resolve(null);
 
       const [marketRes, payResult] = await Promise.all([marketPromise, payPromise]);
@@ -595,7 +598,7 @@ export default function OnchainAnalystTool() {
       if (payResult?.txHash) showToast(payResult.txHash);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to fetch market data.";
-      setError(msg.includes("429") ? "Rate limit hit — please wait a moment and try again." : msg);
+      setError(msg.includes("429") ? "Rate limit hit. Please wait a moment and try again." : msg);
     }
     setFetchLoading(false);
   }, [arcAddress, session, showToast]);
@@ -648,7 +651,12 @@ export default function OnchainAnalystTool() {
       txHash={toastTxHash}
       amount={TOOL_PRICE}
       toolName={TOOL_NAME}
+      onViewReceipt={() => setShowReceipt(true)}
     />
+  );
+
+  const receiptModalNode = (
+    <ReceiptModal open={showReceipt} txHash={toastTxHash} onClose={() => setShowReceipt(false)} />
   );
 
   // ── Loading state ──
@@ -657,6 +665,7 @@ export default function OnchainAnalystTool() {
       <>
         {setupModalNode}
         {txToastNode}
+        {receiptModalNode}
         <div className="flex flex-col items-center justify-center py-16 gap-4">
           <div className="relative">
             <div className="w-12 h-12 border-2 border-violet-500/30 rounded-full" />
@@ -681,6 +690,7 @@ export default function OnchainAnalystTool() {
       <>
         {setupModalNode}
         {txToastNode}
+        {receiptModalNode}
         <AnalysisDashboard
           analysis={analysis}
           coinImage={coinImage}
@@ -695,6 +705,7 @@ export default function OnchainAnalystTool() {
     <>
     {setupModalNode}
     {txToastNode}
+    {receiptModalNode}
     <div className="space-y-5">
       {/* Header */}
       <div>

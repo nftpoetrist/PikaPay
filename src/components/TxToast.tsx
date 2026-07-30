@@ -22,9 +22,10 @@ export interface TxToastProps {
   subtitle?: string;
   /** @deprecated use title/subtitle */
   toolName?: string;
+  onViewReceipt?: () => void;
 }
 
-export default function TxToast({ visible, txHash, amount, title, subtitle, toolName }: TxToastProps) {
+export default function TxToast({ visible, txHash, amount, title, subtitle, toolName, onViewReceipt }: TxToastProps) {
   const shortHash   = txHash ? `${txHash.slice(0, 10)}…${txHash.slice(-6)}` : "";
   const explorerUrl = txHash ? `${ARCSCAN}/tx/${txHash}` : "#";
   const heading     = title   ?? `Access granted · Paid $${amount.toFixed(3)} USDC`;
@@ -88,6 +89,18 @@ export default function TxToast({ visible, txHash, amount, title, subtitle, tool
                 <ExternalLink size={10} />
                 <span style={{ color: "rgba(196,181,253,0.6)", fontFamily: "sans-serif" }}>ArcScan</span>
               </a>
+
+              {onViewReceipt && (
+                <button
+                  onClick={onViewReceipt}
+                  className="block mt-1.5 text-[11px] transition-colors cursor-pointer"
+                  style={{ color: "rgba(196,181,253,0.7)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#c4b5fd")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(196,181,253,0.7)")}
+                >
+                  View receipt →
+                </button>
+              )}
             </div>
           </motion.div>
         )}

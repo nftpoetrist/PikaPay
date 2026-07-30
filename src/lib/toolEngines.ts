@@ -385,14 +385,14 @@ function runAnalysis(c: CoinMarketData): CoinAnalysis {
     : "mid-cap (<$50B)";
 
   const riskExplanation = isStable
-    ? "Stablecoin — price risk is minimal by design. Primary risk is depegging or issuer counterparty exposure."
+    ? "Stablecoin: price risk is minimal by design. Primary risk is depegging or issuer counterparty exposure."
     : `${capDesc} asset with ${volatility.toLowerCase()} volatility. ` +
-      `24h movement is ${change24h >= 0 ? "+" : ""}${change24h.toFixed(2)}% — ` +
+      `24h movement is ${change24h >= 0 ? "+" : ""}${change24h.toFixed(2)}%. ` +
       (volatility === "High"
-        ? "elevated momentum swings increase short-term risk."
+        ? "Elevated momentum swings increase short-term risk."
         : volatility === "Low"
-        ? "stable price action limits near-term downside."
-        : "moderate risk profile within the crypto asset class.");
+        ? "Stable price action limits near-term downside."
+        : "Moderate risk profile within the crypto asset class.");
 
   // ── Scenarios ──
   const bullConf: Confidence = change7d > 3 && change24h > 0 ? "High" : change7d > 0 ? "Medium" : "Low";
@@ -413,7 +413,7 @@ function runAnalysis(c: CoinMarketData): CoinAnalysis {
       (riskCategory === "Low"
         ? "this represents a relatively defensive position within the crypto asset class."
         : riskCategory === "High"
-        ? "caution on position sizing is warranted — volatility is elevated."
+        ? "caution on position sizing is warranted, as volatility is elevated."
         : "standard portfolio risk management applies.");
 
   return {
@@ -434,7 +434,7 @@ function runAnalysis(c: CoinMarketData): CoinAnalysis {
         t2: resistance * 1.13,
         confidence: bullConf,
         note: change24h > 0
-          ? "Building on 24h upside momentum — continuation likely if volume supports."
+          ? "Building on 24h upside momentum. Continuation likely if volume supports."
           : "Recovery play if selling pressure eases near support.",
       },
       bearish: {
@@ -443,7 +443,7 @@ function runAnalysis(c: CoinMarketData): CoinAnalysis {
         s2: support * 0.91,
         confidence: bearConf,
         note: change24h < 0
-          ? "Active selling pressure in 24h window — watch for further downside."
+          ? "Active selling pressure in 24h window. Watch for further downside."
           : "Potential reversal risk if resistance fails to hold.",
       },
       consolidation: {

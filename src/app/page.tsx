@@ -34,7 +34,7 @@ const FEATURES = [
   {
     icon: <Layers size={20} className="text-emerald-400" />,
     title: "USDC native",
-    desc: "Pay with USDC. Stable, predictable pricing. No gas token needed — Arc handles it.",
+    desc: "Pay with USDC. Stable, predictable pricing. No gas token needed, Arc handles it.",
   },
   {
     icon: <Wallet size={20} className="text-amber-400" />,
@@ -93,7 +93,7 @@ export default function HomePage() {
         >
           PikaPay is a micro-payment platform where you spend as little as{" "}
           <span style={{ color: "var(--text-primary)" }}>$0.005 USDC</span> to access premium
-          text and developer utilities — instantly, on-chain.
+          text and developer utilities, instantly, on-chain.
         </motion.p>
 
         <motion.div
@@ -347,7 +347,7 @@ export default function HomePage() {
             </h2>
             <p className="mb-8 max-w-sm mx-auto" style={{ color: "var(--text-secondary)" }}>
               Connect your wallet, pick a tool, and pay{" "}
-              <span style={{ color: "var(--text-primary)" }}>cents</span> — not dollars.
+              <span style={{ color: "var(--text-primary)" }}>cents</span>, not dollars.
             </p>
             <div className="flex items-center justify-center gap-3 flex-wrap">
               {address ? (

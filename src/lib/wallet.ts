@@ -70,7 +70,7 @@ async function requestAccountsWithTimeout(
   const raw = eip1193 as RawProvider;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error("Connection timed out — wallet popup was dismissed")),
+      () => reject(new Error("Connection timed out, wallet popup was dismissed")),
       timeoutMs,
     );
     raw
@@ -148,6 +148,70 @@ const USDC_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
 ];
 
+// ─── Arc transaction memos ─────────────────────────────────
+// Predeployed Memo wrapper contract — routes a call through Arc's CallFrom
+// precompile so the inner call (e.g. USDC.transfer) still sees the original
+// EOA as msg.sender, while emitting a Memo event carrying our metadata.
+// EOA-initiated only — do not wire this behind a smart-account/relayer signer.
+export const MEMO_ADDRESS = "0x5294E9927c3306DcBaDb03fe70b92e01cCede505";
+export const MEMO_ABI = [
+  "function memo(address target, bytes calldata data, bytes32 memoId, bytes calldata memoData) external",
+  "error MemoFailed(bytes data)",
+  "event Memo(address indexed sender, address indexed target, bytes32 callDataHash, bytes32 indexed memoId, bytes memo, uint256 memoIndex)",
+];
+
+// Interim: existing gasLimit (70k) + measured ~20k Memo-wrapper overhead + headroom.
+// Refine to measured×1.3 after reading real receipt.gasUsed from a live payment.
+const MEMO_TRANSFER_GAS_LIMIT = 100_000;
+
+export function buildMemo(toolSlug: string, amountHuman: number, mode: "arc" | "session") {
+  const memoId = ethers.id(toolSlug); // indexed, per-tool lookup key
+  const memoData = ethers.toUtf8Bytes(`v=1;slug=${toolSlug};price=${amountHuman};mode=${mode}`);
+  return { memoId, memoData };
+}
+
+export interface MemoReceipt {
+  toolSlug: string;
+  priceHuman: number;
+  mode: "arc" | "session";
+  memoId: string;
+  blockNumber: number;
+  gasUsed: string;
+}
+
+/** Re-fetches a tx from Arc Testnet and decodes its Memo event, if any.
+ *  Returns null if the tx has no Memo log (e.g. a fund/withdraw tx) or isn't mined yet —
+ *  never assumes the memo format, validates every field before returning. */
+export async function fetchMemoReceipt(txHash: string): Promise<MemoReceipt | null> {
+  const provider = new ethers.JsonRpcProvider(ARC_RPC, { chainId: ARC_CHAIN_ID, name: "arc-testnet" }, { staticNetwork: true });
+  const receipt = await provider.getTransactionReceipt(txHash);
+  if (!receipt) return null;
+
+  const iface = new ethers.Interface(MEMO_ABI);
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== MEMO_ADDRESS.toLowerCase()) continue;
+    let parsed;
+    try { parsed = iface.parseLog(log); } catch { continue; }
+    if (!parsed || parsed.name !== "Memo") continue;
+
+    const fields = Object.fromEntries(
+      ethers.toUtf8String(parsed.args.memo).split(";").map(kv => kv.split("=")),
+    );
+    if (fields.v !== "1" || !fields.slug || !fields.price || (fields.mode !== "arc" && fields.mode !== "session")) {
+      continue; // not our memo format — don't guess, skip
+    }
+    return {
+      toolSlug: fields.slug,
+      priceHuman: parseFloat(fields.price),
+      mode: fields.mode as "arc" | "session",
+      memoId: parsed.args.memoId,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed.toString(),
+    };
+  }
+  return null;
+}
+
 export async function getUSDCBalance(
   provider: ethers.BrowserProvider,
   address: string,
@@ -182,31 +246,37 @@ export async function approveUSDCSpender(
   await tx.wait(1);
 }
 
-/** Send real USDC on Arc Testnet.
+/** Send real USDC on Arc Testnet, tagged with an Arc transaction memo (tool slug + price).
+ *  - Routed through the Memo wrapper contract via ethers.Contract (not a raw sendTransaction)
+ *    so MemoFailed reverts are auto-decoded into readable ERC-20 revert reasons.
  *  - Explicit gasLimit skips eth_estimateGas (~200ms saved).
  *  - 60s timeout + auto-retry with 1.5× gas on replacement-underpriced. */
 export async function sendUSDC(
   provider: ethers.BrowserProvider,
   to: string,
   amountHuman: number,
+  toolSlug: string,
 ): Promise<{ txHash: string }> {
-  const signer   = await provider.getSigner();
-  const contract = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
-  const amount   = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
+  const signer       = await provider.getSigner();
+  const erc20        = new ethers.Interface(USDC_ABI);
+  const amount        = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
+  const transferData  = erc20.encodeFunctionData("transfer", [to, amount]);
+  const { memoId, memoData } = buildMemo(toolSlug, amountHuman, "arc");
+  const memoContract  = new ethers.Contract(MEMO_ADDRESS, MEMO_ABI, signer);
 
   const waitWithTimeout = (tx: ethers.TransactionResponse) =>
     Promise.race([
       tx.wait(1),
       new Promise<never>((_, reject) =>
         setTimeout(
-          () => reject(new Error("Transaction timed out — Arc Testnet may be congested. Check ArcScan for status.")),
+          () => reject(new Error("Transaction timed out. Arc Testnet may be congested, check ArcScan for status.")),
           60_000,
         ),
       ),
     ]);
 
   try {
-    const tx      = await contract.transfer(to, amount, { gasLimit: USDC_GAS_LIMIT });
+    const tx      = await memoContract.memo(USDC_ADDR, transferData, memoId, memoData, { gasLimit: MEMO_TRANSFER_GAS_LIMIT });
     const receipt = await waitWithTimeout(tx);
     return { txHash: (receipt as ethers.TransactionReceipt).hash };
   } catch (err: unknown) {
@@ -216,7 +286,7 @@ export async function sendUSDC(
       const feeData  = await provider.getFeeData();
       const gasPrice = feeData.gasPrice ?? ethers.parseUnits("2", "gwei");
       const bumped   = (gasPrice * BigInt(150)) / BigInt(100);
-      const tx2      = await contract.transfer(to, amount, { gasLimit: USDC_GAS_LIMIT, gasPrice: bumped });
+      const tx2      = await memoContract.memo(USDC_ADDR, transferData, memoId, memoData, { gasLimit: MEMO_TRANSFER_GAS_LIMIT, gasPrice: bumped });
       const receipt2 = await waitWithTimeout(tx2);
       return { txHash: (receipt2 as ethers.TransactionReceipt).hash };
     }

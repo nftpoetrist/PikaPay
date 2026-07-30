@@ -9,6 +9,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import BlockConfirmation from "@/components/BlockConfirmation";
+import ReceiptModal from "@/components/ReceiptModal";
 import { paymentService } from "@/lib/blockchain/paymentService";
 import { Transaction, ConfirmationEvent } from "@/lib/blockchain/types";
 import { sendUSDC, PIKAPAY_MERCHANT, shortAddress } from "@/lib/wallet";
@@ -81,6 +82,7 @@ export default function PaymentGate({ toolSlug, toolName, price, onSuccess }: Pr
   const [events, setEvents] = useState<ConfirmationEvent[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
 
   const showToast = useCallback(() => {
     setToastVisible(true);
@@ -108,7 +110,7 @@ export default function PaymentGate({ toolSlug, toolName, price, onSuccess }: Pr
     setTx(pending);
 
     try {
-      const { txHash } = await sendUSDC(arcProvider, PIKAPAY_MERCHANT, price);
+      const { txHash } = await sendUSDC(arcProvider, PIKAPAY_MERCHANT, price, toolSlug);
       const confirmed = { ...pending, status: "confirmed" as const, txHash, confirmations: 1 };
       setTx(confirmed);
       setStep("done");
@@ -118,7 +120,7 @@ export default function PaymentGate({ toolSlug, toolName, price, onSuccess }: Pr
       let friendly = msg;
       if (msg.includes("user rejected")) friendly = "Transaction rejected by user.";
       else if (msg.includes("txpool is full")) friendly = "Arc Testnet is congested. Please try again in a few seconds.";
-      else if (msg.includes("timed out")) friendly = "Transaction timed out — Arc Testnet is slow right now. Check ArcScan or try again.";
+      else if (msg.includes("timed out")) friendly = "Transaction timed out. Arc Testnet is slow right now, check ArcScan or try again.";
       setErrorMsg(friendly);
       setStep("error");
     }
@@ -370,7 +372,11 @@ export default function PaymentGate({ toolSlug, toolName, price, onSuccess }: Pr
                 </p>
               </div>
             ) : (
-              <BlockConfirmation transaction={tx} events={events} />
+              <BlockConfirmation
+                transaction={tx}
+                events={events}
+                onViewReceipt={tx.paymentMode === "external_wallet" ? () => setShowReceipt(true) : undefined}
+              />
             )}
           </motion.div>
         )}
@@ -390,6 +396,7 @@ export default function PaymentGate({ toolSlug, toolName, price, onSuccess }: Pr
     </div>
 
     <AutoPayToast visible={toastVisible} toolName={toolName} amount={price} />
+    <ReceiptModal open={showReceipt} txHash={tx?.txHash ?? ""} onClose={() => setShowReceipt(false)} />
     </>
   );
 }

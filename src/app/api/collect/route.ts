@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "Transaction failed";
     const isAllowance = msg.toLowerCase().includes("allowance") || msg.toLowerCase().includes("insufficient");
     return NextResponse.json(
-      { error: isAllowance ? "Insufficient allowance — please approve first" : msg },
+      { error: isAllowance ? "Insufficient allowance, please approve first" : msg },
       { status: 500 },
     );
   }

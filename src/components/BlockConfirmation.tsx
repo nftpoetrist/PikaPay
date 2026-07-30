@@ -16,6 +16,7 @@ import { Transaction, ConfirmationEvent, REQUIRED_CONFIRMATIONS, NETWORKS } from
 interface Props {
   transaction: Transaction;
   events: ConfirmationEvent[];
+  onViewReceipt?: () => void;
 }
 
 function BlockIndicator({ index, confirmed, current }: { index: number; confirmed: boolean; current: boolean }) {
@@ -86,7 +87,7 @@ const STATUS_COLORS: Record<string, string> = {
   failed:     "#f87171",
 };
 
-export default function BlockConfirmation({ transaction, events }: Props) {
+export default function BlockConfirmation({ transaction, events, onViewReceipt }: Props) {
   const { status, txHash, confirmations, blockNumber, gasUsed, amountHuman, toolName, error } = transaction;
   const explorer = NETWORKS["arc-testnet"].explorer;
   const pct = (confirmations / REQUIRED_CONFIRMATIONS) * 100;
@@ -227,6 +228,19 @@ export default function BlockConfirmation({ transaction, events }: Props) {
             </div>
           ))}
         </div>
+      )}
+
+      {/* View receipt */}
+      {status === "confirmed" && onViewReceipt && (
+        <button
+          onClick={onViewReceipt}
+          className="w-full text-center text-[11px] py-2 rounded-xl transition-colors cursor-pointer"
+          style={{ background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.18)", color: "#c4b5fd" }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(124,58,237,0.4)")}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(124,58,237,0.18)")}
+        >
+          View memo receipt →
+        </button>
       )}
 
       {/* Error */}

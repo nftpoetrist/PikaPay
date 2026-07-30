@@ -122,7 +122,7 @@ export default function ApproveModal({
                   style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
                 >
                   <p style={{ color: "var(--text-secondary)" }}>
-                    PikaPay will automatically charge <span className="font-semibold text-violet-300">$0.015 USDC</span> each time you run a new analysis — no wallet popup required.
+                    PikaPay will automatically charge <span className="font-semibold text-violet-300">$0.015 USDC</span> each time you run a new analysis, no wallet popup required.
                   </p>
                   <p style={{ color: "var(--text-muted)" }}>
                     This approval covers up to <span style={{ color: "var(--text-secondary)" }}>{APPROVE_AMOUNT} USDC</span> (~{Math.floor(APPROVE_AMOUNT / 0.015)} searches). You can revoke anytime from your wallet.

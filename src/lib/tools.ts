@@ -16,7 +16,7 @@ export const TOOLS: Tool[] = [
     name: "Text Summarizer",
     description: "Condense long text into key sentences using extractive analysis.",
     longDescription:
-      "Algorithm-based extractive summarization. Scores each sentence by word frequency and positional weight, then returns the top N most informative sentences. Works entirely in-browser — no API calls.",
+      "Algorithm-based extractive summarization. Scores each sentence by word frequency and positional weight, then returns the top N most informative sentences. Works entirely in-browser, no API calls.",
     price: 0.005,
     category: "AI",
     icon: "✦",
@@ -65,7 +65,7 @@ export const TOOLS: Tool[] = [
     description:
       "Rule-based scenario engine for crypto markets. Paste CMC data → institutional-grade report.",
     longDescription:
-      "Paste raw CoinMarketCap data and get a full institutional-style report: market overview, technical support/resistance levels, risk scoring (0–100), IF–THEN scenario engine with confidence ratings, and short/long-term bias analysis. 100% in-browser — zero network calls.",
+      "Paste raw CoinMarketCap data and get a full institutional-style report: market overview, technical support/resistance levels, risk scoring (0–100), IF–THEN scenario engine with confidence ratings, and short/long-term bias analysis. 100% in-browser, zero network calls.",
     price: 0.015,
     category: "Analytics",
     icon: "📊",

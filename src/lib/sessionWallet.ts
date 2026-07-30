@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { MEMO_ADDRESS, MEMO_ABI, buildMemo } from "@/lib/wallet";
 
 export const ARC_RPC        = "https://5042002.rpc.thirdweb.com";
 export const ARC_CHAIN_ID   = 5042002;
@@ -13,6 +14,9 @@ export const APPROVE_AMOUNT  = 10;
 const GAS_APPROVE      = 70_000;
 const GAS_TRANSFER     = 70_000;
 const GAS_TRANSFER_FROM = 80_000;
+
+// Measured on real Arc Testnet tx (transferFrom + memo): gasUsed = 73,281. ×1.3 headroom.
+const MEMO_TRANSFER_FROM_GAS_LIMIT = 95_000;
 
 const SESSION_KEY = "pikapay_session_key";
 
@@ -120,22 +124,34 @@ async function retryOnTxpoolFull<T>(fn: () => Promise<T>, maxAttempts = 4): Prom
   throw new Error("Unreachable");
 }
 
-/** Automated micropayment — no MetaMask popup.
+/** Automated micropayment — no MetaMask popup, tagged with an Arc transaction memo.
+ *  Routed through the Memo wrapper contract via ethers.Contract (not a raw sendTransaction)
+ *  so MemoFailed reverts are auto-decoded into readable ERC-20 revert reasons.
  *  Explicit gasLimit skips eth_estimateGas. Fast polling matches Arc finality. */
 export async function collectWithSessionWallet(
   fromAddress: string,
   toAddress:   string,
   amountHuman: number,
+  toolSlug:    string,
 ): Promise<string> {
   const wallet = getSessionWallet();
-  const usdc   = new ethers.Contract(USDC_ADDR, USDC_ABI, wallet);
+  const erc20  = new ethers.Interface(USDC_ABI);
   const amount = ethers.parseUnits(amountHuman.toFixed(6), USDC_DECIMALS);
+  const transferFromData = erc20.encodeFunctionData("transferFrom", [
+    ethers.getAddress(fromAddress),
+    ethers.getAddress(toAddress),
+    amount,
+  ]);
+  const { memoId, memoData } = buildMemo(toolSlug, amountHuman, "session");
+  const memoContract = new ethers.Contract(MEMO_ADDRESS, MEMO_ABI, wallet);
+
   return retryOnTxpoolFull(async () => {
-    const tx = await usdc.transferFrom(
-      ethers.getAddress(fromAddress),
-      ethers.getAddress(toAddress),
-      amount,
-      { gasLimit: GAS_TRANSFER_FROM },
+    const tx = await memoContract.memo(
+      USDC_ADDR,
+      transferFromData,
+      memoId,
+      memoData,
+      { gasLimit: MEMO_TRANSFER_FROM_GAS_LIMIT },
     );
     const receipt = await tx.wait(1);
     return (receipt as ethers.TransactionReceipt).hash;

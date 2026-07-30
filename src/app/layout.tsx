@@ -13,7 +13,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "PikaPay — Micro-payment tools on Arc",
+  title: "PikaPay: Micro-payment tools on Arc",
   description: "Pay tiny amounts of USDC to access premium text and dev utilities, powered by Arc Testnet.",
   keywords: ["micropayments", "USDC", "Arc", "tools", "utilities", "web3"],
 };
