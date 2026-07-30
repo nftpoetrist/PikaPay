@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Wallet, Zap, X, LogOut, ExternalLink } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { useState } from "react";
-import WalletWidget from "@/components/WalletWidget";
 import WalletPickerModal from "@/components/WalletPickerModal";
 
 export default function Navbar() {
@@ -60,7 +59,6 @@ export default function Navbar() {
 
             {/* Wallet button */}
             <div className="flex items-center gap-2 justify-end">
-              <WalletWidget />
               {address ? (
                 <button
                   onClick={() => setShowProfile(true)}

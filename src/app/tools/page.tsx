@@ -46,7 +46,7 @@ export default function ToolsPage() {
           {TOOLS.length} tools available
         </h1>
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          Pay once per use. No subscriptions. Powered by guest wallet.
+          Pay once per use. No subscriptions.
         </p>
       </motion.div>
 

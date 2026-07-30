@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { WalletProvider } from "@/contexts/WalletContext";
-import { EmbeddedWalletProvider } from "@/contexts/EmbeddedWalletContext";
 import { SessionWalletProvider } from "@/contexts/SessionWalletContext";
 import Navbar from "@/components/Navbar";
 
@@ -26,14 +25,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} h-full`}>
       <body className="min-h-full flex flex-col">
-        <EmbeddedWalletProvider>
-          <WalletProvider>
-            <SessionWalletProvider>
-              <Navbar />
-              <main className="flex-1 pt-16">{children}</main>
-            </SessionWalletProvider>
-          </WalletProvider>
-        </EmbeddedWalletProvider>
+        <WalletProvider>
+          <SessionWalletProvider>
+            <Navbar />
+            <main className="flex-1 pt-16">{children}</main>
+          </SessionWalletProvider>
+        </WalletProvider>
       </body>
     </html>
   );
