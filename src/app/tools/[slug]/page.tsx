@@ -16,18 +16,12 @@ import { useSessionWallet } from "@/contexts/SessionWalletContext";
 import { useWallet } from "@/contexts/WalletContext";
 
 // Tool UI components
-import SummarizerTool      from "@/components/tools/SummarizerTool";
-import WordCounterTool     from "@/components/tools/WordCounterTool";
-import IdeaGeneratorTool   from "@/components/tools/IdeaGeneratorTool";
-import TextFormatterTool   from "@/components/tools/TextFormatterTool";
 import OnchainAnalystTool  from "@/components/tools/OnchainAnalystTool";
+import HomeSimulatorTool   from "@/components/tools/HomeSimulatorTool";
 
 const TOOL_COMPONENTS: Record<string, React.ComponentType> = {
-  "text-summarizer":   SummarizerTool,
-  "word-counter":      WordCounterTool,
-  "idea-generator":    IdeaGeneratorTool,
-  "text-formatter":    TextFormatterTool,
   "onchain-analyst":   OnchainAnalystTool,
+  "smart-home":        HomeSimulatorTool,
 };
 
 export default function ToolPage({ params }: { params: Promise<{ slug: string }> }) {
